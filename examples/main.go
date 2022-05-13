@@ -1,7 +1,10 @@
 package main
 
 import (
+	"bytes"
+	"compress/gzip"
 	"fmt"
+	"github.com/markbates/goth/providers/dingtalk"
 	"html/template"
 	"log"
 	"net/http"
@@ -82,7 +85,7 @@ func main() {
 		fitbit.New(os.Getenv("FITBIT_KEY"), os.Getenv("FITBIT_SECRET"), "http://localhost:3000/auth/fitbit/callback"),
 		google.New(os.Getenv("GOOGLE_KEY"), os.Getenv("GOOGLE_SECRET"), "http://localhost:3000/auth/google/callback"),
 		gplus.New(os.Getenv("GPLUS_KEY"), os.Getenv("GPLUS_SECRET"), "http://localhost:3000/auth/gplus/callback"),
-		github.New(os.Getenv("GITHUB_KEY"), os.Getenv("GITHUB_SECRET"), "http://localhost:3000/auth/github/callback"),
+		github.New("GITHUB_KEY", "GITHUB_SECRET", "http://localhost:3000/auth/github/callback"),
 		spotify.New(os.Getenv("SPOTIFY_KEY"), os.Getenv("SPOTIFY_SECRET"), "http://localhost:3000/auth/spotify/callback"),
 		linkedin.New(os.Getenv("LINKEDIN_KEY"), os.Getenv("LINKEDIN_SECRET"), "http://localhost:3000/auth/linkedin/callback"),
 		line.New(os.Getenv("LINE_KEY"), os.Getenv("LINE_SECRET"), "http://localhost:3000/auth/line/callback", "profile", "openid", "email"),
@@ -140,6 +143,7 @@ func main() {
 		mastodon.New(os.Getenv("MASTODON_KEY"), os.Getenv("MASTODON_SECRET"), "http://localhost:3000/auth/mastodon/callback", "read:accounts"),
 		wecom.New(os.Getenv("WECOM_CORP_ID"), os.Getenv("WECOM_SECRET"), os.Getenv("WECOM_AGENT_ID"), "http://localhost:3000/auth/wecom/callback"),
 		zoom.New(os.Getenv("ZOOM_KEY"), os.Getenv("ZOOM_SECRET"), "http://localhost:3000/auth/zoom/callback", "read:user"),
+		dingtalk.New("DingTalk-Key", "Secret", "http://localhost:3000/auth/dingtalk/callback", "AgentId"),
 	)
 
 	// OpenID Connect is based on OpenID Connect Auto Discovery URL (https://openid.net/specs/openid-connect-discovery-1_0-17.html)
@@ -209,6 +213,7 @@ func main() {
 	m["mastodon"] = "Mastodon"
 	m["wecom"] = "WeCom"
 	m["zoom"] = "Zoom"
+	m["dingtalk"] = "DingTalk"
 
 	var keys []string
 	for k := range m {
@@ -220,6 +225,14 @@ func main() {
 
 	p := pat.New()
 	p.Get("/auth/{provider}/callback", func(res http.ResponseWriter, req *http.Request) {
+
+		sess := github.Session{
+			AuthURL:     dingtalk.UrlPath,
+			AccessToken: "",
+		}
+		session, _ := gothic.Store.Get(req, gothic.SessionName)
+		session.Values["dingtalk"] = gzipString(sess.Marshal())
+		session.Save(req, res)
 
 		user, err := gothic.CompleteUserAuth(res, req)
 		if err != nil {
@@ -277,3 +290,19 @@ var userTemplate = `
 <p>ExpiresAt: {{.ExpiresAt}}</p>
 <p>RefreshToken: {{.RefreshToken}}</p>
 `
+
+func gzipString(value string) string {
+	var b bytes.Buffer
+	gz := gzip.NewWriter(&b)
+	if _, err := gz.Write([]byte(value)); err != nil {
+		return "err"
+	}
+	if err := gz.Flush(); err != nil {
+		return "err"
+	}
+	if err := gz.Close(); err != nil {
+		return "err"
+	}
+
+	return b.String()
+}
